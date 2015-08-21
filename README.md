@@ -49,4 +49,7 @@ Of course, there is always more to do. How did mercenary upgrades factor in? Was
 race to defense stats? Or to balance upgrades across the board? Were there differences according to player MMR?
 Should we only look at close games where there wasn't some obvious advantage driving the match? 
 
-
+### Understanding / Using the project
+With the project downloaded from GitHub, edit the file "apikey.json.todo" and record your API key and save as "apikey.json". (Optional - if you only want to look at the results, the data.json holds the compacted data that was queried earlier. This is needed for for the data querying code to function, though, obviously.)
+Open either bw-matchups.html or bw-popularity.html in your browser. Explore the data! Jump to conclusions! 
+The bw-datascoop.html page is included for completeness but isn't part of the final result. 
