@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Bilgewater</title>
+		<meta charset="utf-8">
+		<link type="text/css" rel="stylesheet" href="dc.css">	
+		<link type="text/css" rel="stylesheet" href="bilgestyle.css">
+		<script src="d3.js"></script>
+		<script src="jquery-2.1.4.min.js"></script>
+		<script src="crossfilter.js"></script>
+		<script src="dc.js"></script>
+		<script src="bilgewater.js"></script>
+	</head>
+	<body>
+		<div id="wrapper">
+		<div id="header">Bilgewater Data Mining</div>
+		<div id="content">
+		<div class="menu"><a href="bw-popularity.html">Popularity and Win Rates</a><a href="bw-matchups.html">Matchups by Comp</a></div>
+		<div class="info">
+		This visualization is more geared towards match ups. 
+		Was a particular composition strong against certain other comps? Was there a factor of game duration?
+		<p>
+		In the heat map below, points are colored green if the winning composition (x axis) was seen to win
+		more often against the losing composition (y axis). Red circles are the opposite - that matchup went
+		badly. Gray circles were even match ups. The graph is therefore symmetric around the x-y line, with 
+		values inverted. Matches with 100% loss rate are not represented (but this is a bug).
+		 
+		<p>
+		This data set includes all matches with full teams of mercenaries, so there are some data points that 
+		only represent a handful of games. (Looking at you, penta-Ocklepod.) 
+		
+		</div>
+
+		
+		<div id="charts" >
+			<div style="text-align:center;margin-left:auto; margin-right:auto;width:1000px;" id="match-duration-chart" class="chart">
+				<div class="title">Duration <span> <a class="reset" href="javascript:durationChart.filterAll();dc.redrawAll();" style="display:none;">reset</a></span></div>
+			</div>
+			<div style="text-align:center;margin-left:auto; margin-right:auto;width:1000px;" id="composition-chart" class="chart">
+				<div class="title">Mercenary Composition Match Ups : Hover over a data point to see the matchup</div>
+			</div>
+		</div>
+
+		<script>
+		bilge.init();
+		var test = $("#wrapper");
+		//create these at this scope so that the controls can see them
+		var durationChart = dc.barChart("#match-duration-chart");
+		var compositionChart = dc.heatMap("#composition-chart");
+			
+		//load the analysis data and build the charts in the future
+		bilge.loadAnalysis(function() {
+			//ensure we are only looking at full 5v5 matches
+			bilge.eliminatePartialTeams();
+			//produce the flat joined data crossfilter wants
+			bilge.joinAnalysis(function() {
+			
+			//make the cross filter on the analysis data
+			var matchCF = crossfilter(bilge.joinAnalysisData);
+
+			//make cross filter dimensions
+			var duration = matchCF.dimension(function(d) { return d.duration/60;});
+			//group duration by minute
+			var durationGroup = duration.group(function(d) { return Math.floor(d);});
+			//for a heat map we return a compound key (winner, loser)
+			var comp = matchCF.dimension(function(d) {return [d.winComp, d.loseComp];});
+			var compGroup = comp.group();
+			
+			//make the bar charts
+			durationChart
+				.width(400)
+				.height(200)
+				.turnOnControls(true)
+				.margins({top : 10, right:20, bottom:20, left : 20})
+				.dimension(duration)
+				.group(durationGroup)
+				.x(d3.scale.linear().domain([0, 60]))
+				.renderHorizontalGridLines(true);
+			durationChart.yAxis().tickFormat(function v() {return "";});
+			
+			//make the composition chart
+			compositionChart
+				.width(1000)
+				.height(1000)
+				//leave room for long axis labels
+				.margins({top : 10, right:20, bottom:80, left : 80})
+				.dimension(comp)
+				.group(compGroup)
+				//unpack the compound key
+				.keyAccessor(function(d) {return d.key[0];})
+				.valueAccessor(function(d) {return d.key[1];})
+				.colorAccessor(function(d) { 
+					//there is a small subtle thing for same-comp matches.  
+					//if the keys are the same then there is always one loss and one win - 
+					//the win rate is always 50%. But we don't want to double count the games. 
+					if (d.key[1] == d.key[0])
+						return 50;
+					//calculate win rate for color mapping
+					//clear filters
+					comp.filterAll();
+					//count the total number of games by taking this value (this comp winning) and 
+					//adding the number of wins with the opposite match up (note inverted keys in filter)
+					var totalGames = d.value + comp.filterExact([d.key[1], d.key[0]]).top(Infinity).length;
+					//clear filter again and calculate a win percentage
+					comp.filterAll();
+					if (totalGames == 0) return 0;
+					var winPercentage = 100* d.value / (totalGames);
+					return winPercentage;
+				})
+				//label the rows and columns with a simple text version of the comp
+				.colsLabel(function(d) {
+					var numOck = Math.floor(d/216);
+					var numPlu = Math.floor((d-216*numOck)/36);
+					var numIro = Math.floor((d - 216*numOck - 36*numPlu)/6);
+					var numRaz = Math.floor((d - 216*numOck - 36*numPlu - 6*numIro));
+					return "R"+numRaz + " I" + numIro + " P" + numPlu + " O" + numOck;
+				})
+				.rowsLabel(function(d) {
+					var numOck = Math.floor(d/216);
+					var numPlu = Math.floor((d-216*numOck)/36);
+					var numIro = Math.floor((d - 216*numOck - 36*numPlu)/6);
+					var numRaz = Math.floor((d - 216*numOck - 36*numPlu - 6*numIro));
+					return "R"+numRaz + " I" + numIro + " P" + numPlu + " O" + numOck;}
+				)
+				//turn off the controls on the heat map as they are too confusing
+				.boxOnClick(function(d) {})
+				.xAxisOnClick(function(d) {})
+				.yAxisOnClick(function(d) {})
+				//put in a descriptive tooltip title
+				.title(function(d) { 
+					//like the color we want to not get just the number of wins, but the total number 
+					//of games played; for this we filter the keys in the opposite order 
+					//also, like color, there is a small subtle thing for same-comp matches.  
+					//if the keys are the same then there is always one loss and one win - 
+					//the win rate is always 50%. But we don't want to double count the games. 
+					if (d.key[1] == d.key[0]) {
+						return bilge.describeComp(d.key[0]) + ' vs ' 
+						+ bilge.describeComp(d.key[1]) + ' : ' + d.value + ' games played, 50% win rate ';
+					}
+					comp.filterAll();
+					var totalGames = d.value + comp.filterExact([d.key[1], d.key[0]]).top(Infinity).length;
+					comp.filterAll();
+					if (totalGames == 0) return " no games ";
+					var winPercentage = Math.round(100* d.value / (totalGames));
+					return bilge.describeComp(d.key[0]) + ' vs ' 
+					+ bilge.describeComp(d.key[1]) + ' : ' + totalGames + ' games played, ' + winPercentage + '% win rate ';
+				})
+				//color ramp from red to green, through gray
+				.colors(["#EE8888", "#CC8888", "#AA8888", "#888888", "#88AA88", "#88CC88", "#88EE88"])
+				//map the win percent domain 0 to 100 to the color ramp
+				.colorDomain([0,100])
+				//post process
+				.on('renderlet', function(chart, filter) {
+					//rotate the labels for the x axis to vertical 
+					var labels = $(".heatmap").children('g .cols').children('text');
+					for (var i = 0; i < labels.length; i++) {
+						var label = $(labels[i]);
+						var x = label.attr("x");
+						var y = label.attr("y");
+						label.attr("dx", -16);
+						label.attr("dy", 3);
+						label.attr("transform", "rotate(-90," + x + "," + y + ")");
+					}
+					//and adjust the offset slightly for the rows
+					$(".heatmap").children('g .rows').children('text').attr("dy", 4);
+					
+					//would be cool to map opacity or something to number of games played
+					// to de-emphasize some of the less statistically significant matchups 
+					// but doing it here would entail, I think, looking at every box-group in the chart
+					//and therefore feels like that would be unresponsive
+					
+				});
+				
+				
+			dc.renderAll();
+				
+		})
+	});
+		</script>
+		</div>
+		<div id="footer" class="footer">This Bilgewater Data Analysis was created for the Riot API challenge 8/2015. Riot does not 
+		endorse this work and it does not reflect the views or opinions of Riot Games, or anyone involved in producing or managing League 
+		of Legends. League of Legends and Riot Games are trademarks or registered trademarks of Riot Games, Inc. League of Legends © Riot Games, Inc.
+		</div>
+	</div>
+	
+</body>
+
+</html>

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Bilgewater</title>
+		<meta charset="utf-8">
+		<link type="text/css" rel="stylesheet" href="bilgestyle.css">
+		<script src="d3.min.js"></script>
+		<script src="jquery-2.1.4.min.js"></script>
+		<script src="crossfilter.min.js"></script>
+		<script src="bilgewater.js"></script>
+		
+		<script>
+			//load the game ids
+			bilge.init();
+			
+		</script>
+	</head>
+	<body>
+	
+	<div id="wrapper">
+	<div id="header">Bilgewater Data Mining</div>
+	<div>This is included just as process documentation. The scope of the number of games to analyze
+	and the rate limit (though I could have asked for a production key, I suppose) meant that, in my first
+	dozen attempts to grab stuff, the server would sometimes choke on some flavor of 500 level error. </div>
+	<div>Since I just wanted to grab the data and do my primary search and transform code to extract the 
+	game result, and the game id in case I wanted to query for more stuff later, I opted to have this page
+	where my data fetch could just echo json to the page and make it easier to save off to a json file. 
+	</div>
+	<div>Also, as a developer facing page, I relied on just operating in the javascript console instead of 
+	making controls for everything. Firebug warns about SHA-1 certificates but that's fine. </div>
+	
+	<div>From the console run bilge.processAll(). If everything is configured correctly 
+	it will start iterating through the game ids and executing match queries against the API.
+	Results will be echoed to the div below.
+	429 errors are caught and retried, but 500 errors terminate the query (in case something really is 
+	badly wrong.)
+	</div>
+	
+	<div>If / when the process stops, use bilge.index in the console to determine where in the array we got to.
+	Copy - paste the JSON dump into the data.json file (I use Notepad++, so that it can do search and replace
+	for things like end of line characters and not choke on large files) and add commas between the rows.
+	Having malformed JSON isn't so nice and things will fail to work and not necessarily tell you why. 
+	Then edit the bilgewater.js file - the processAll function (line 46) defines the index it will start at.
+	Make that the index you just read out (assuming the execution stopped on a 500 error, that index hasn't 
+	fetched yet) and after letting the flames go out on the server, resume querying for data. 
+	</div>
+	
+	<div> Every thing else is keyed off of parsing and filtering that data.json file, so no other changes are needed.
+	</div>
+	
+	<div id="datadump"></div>
+	</body>
+
+</html>

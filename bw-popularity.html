@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Bilgewater - Riot API Challenge 2.0</title>
+		<meta charset="utf-8">
+		<link type="text/css" rel="stylesheet" href="dc.css">
+		<link type="text/css" rel="stylesheet" href="bilgestyle.css">
+		<script src="d3.js"></script>
+		<script src="jquery-2.1.4.min.js"></script>
+		<script src="crossfilter.js"></script>
+		<script src="dc.js"></script>
+		<script src="bilgewater.js"></script>
+	</head>
+	<body>
+		<div id="wrapper">
+		<div id="header">Bilgewater Data Mining</div>
+		<div id="content">
+	<div class="menu"><a href="bw-popularity.html">Popularity and Win Rates</a><a href="bw-matchups.html">Matchups by Comp</a></div>
+		<div class="info">The Bilgewater mode introduced minion upgrades. A player could hire one of four kinds of Mercenary to replace a 
+		normal lane minion. Once a player purchased a Mercenary that choice was locked in. The hired mercenary would appear 
+		in every lane, along side what ever mercenaries had been purchased by the other team mates. This analysis of 10,000 Bilgewater 
+		games (provided by Riot as a part of the API challenge) attempts 
+		to shed light on some basic questions - which compositions were popular? Were some compositions part of winning 
+		teams more often than not? Did player preferences change over time? Were some compositions better in long games? 
+		Were some compositions good at countering other compositions (that is, could players have used "reactive" builds effectively)?
+		<p>
+		Riot's information page on the game mode can be seen <a href="http://na.leagueoflegends.com/en/site/bilgewater/#brochure-1">here</a>
+		<p>
+		A note about compositions : there are 56 total (full team) compositions to consider. This can be enumerated by hand, or you can calculate it 
+		via <i><a href="https://en.wikipedia.org/wiki/Combination">Combination with Repetition</a></i>. As there are 5 players and 4 
+		mercenaries, this is ((4 5)) which equals 56. We are assuming that the order of purchase does not matter, and we are likewise
+		ignoring the time at which a mercenary is purchased.
+		<p>
+		As mercenaries were purchased with an alternative currency, there was no reason not to purchase a mercenary other 
+		than forgetting or being AFK for the whole game. However, of the 10,000 games, over 2000 of them had one team with 
+		less than 5 minions. To make the comparisons fair, those games were removed from the data set. 
+		
+		<p>To explore the data set, use the filters below to narrow the range of data. The composition chart on the right 
+		shows (by length of the bar chart) how often the composition occurred in the data set, and the win rate of that 	
+		composition is shown in the label. Press the button above that chart to order by win rate instead of composition. Only
+		the top 40 used compositions are shown, the remaining few were played less than 100 times (but can be seen in the matchups
+		page.)</div>
+	
+		
+
+		
+		<div id="charts">
+			<div id="composition-chart" class="chart">
+				<a class="reset" href="javascript:compositionChart.filterAll();dc.redrawAll();" style="display:none;">reset</a>
+				<div class="title">Mercenary Composition (Top 40, Ranked by <button id="sortType" onclick="changeCompSort()">Popularity</button>, Win Rate Labelled)</div>
+			</div>
+			<div id="match-duration-chart" class="chart">
+				<a class="reset" href="javascript:durationChart.filterAll();dc.redrawAll();" style="display:none;">reset</a>
+				<div class="title">Duration</div>
+			</div>
+			<div id="side-chart" class="chart">
+				<a class="reset" href="javascript:sideChart.filterAll();dc.redrawAll();" style="display:none;">reset</a>
+				<div class="title">Side</div>
+			</div>
+			<div id="winners-chart" class="chart">
+				<a class="reset" href="javascript:winnersChart.filterAll();dc.redrawAll();" style="display:none;">reset</a>
+				<div class="title">Winners</div>
+			</div>
+			<div id="match-start-chart" class="chart">
+				<a class="reset" href="javascript:matchStartChart.filterAll();dc.redrawAll();" style="display:none;">reset</a>
+				<div class="title">Start Time</div>
+		  </div>
+		</div>
+		
+		<script>
+		//load the API key
+		bilge.init();
+		
+		//create these at this scope so that the controls can see them
+		var durationChart = dc.barChart("#match-duration-chart");
+		var sideChart = dc.pieChart("#side-chart");
+		var winnersChart = dc.pieChart("#winners-chart");
+		var matchStartChart = dc.barChart("#match-start-chart");
+		var compositionChart = dc.rowChart("#composition-chart");
+		
+		//current sorting mode starts as popularity
+		var sortCompByPopularity = true;
+		
+		//allow the user to sort the table by either popularity / occurance or by winrate
+		//which we calculated and stashed in the initial pass
+		function changeCompSort() {
+			sortCompByPopularity = !sortCompByPopularity;
+
+			if (sortCompByPopularity) {
+				$("#sortType")[0].textContent = "Popularity";
+				compositionChart.ordering(function(d) {return -d.value;});
+				compositionChart.redraw();
+			} else {
+				$("#sortType")[0].textContent = "Win Rate";
+				compositionChart.ordering(function(d) {return -d.winRate;})
+				compositionChart.redraw();
+			}
+
+		};
+			
+		//load the analysis data and build the charts in the future
+		bilge.loadAnalysis(function() {
+			
+			//remove the games that don't have 5v5 mercs
+			bilge.eliminatePartialTeams();
+			
+			//make some formatters
+			var formatNumber = d3.format(",d"),
+			formatChange = d3.format("+,d"),
+			formatDate = d3.time.format("%B %d, %Y"),
+			formatTime = d3.time.format("%I:%M %p");
+			
+			// coerce the match start into a date to make it more usable.
+			bilge.analysis.forEach(function(d, i) {
+				//add an index key
+				d.index = i;
+				d.date = new Date(d.gameStart);
+				//convert the individual merc counts into a single key value
+				d.composition = bilge.calcComposition(d);
+			});
+			
+			//make the cross filter on the analysis data
+			var matchCF = crossfilter(bilge.analysis);
+
+			//make cross filter dimensions
+			var duration = matchCF.dimension(function(d) { return d.gameDuration/60;});
+			//group duration by minute
+			var durationGroup = duration.group(function(d) { return Math.floor(d);});
+			
+			var side = matchCF.dimension(function(d) {return d.teamId;});
+			var sideGroup = side.group();
+			
+			var win = matchCF.dimension(function(d) {return d.winner;});
+			var winGroup = win.group();
+			
+			var start = matchCF.dimension(function(d) {return d.date.getTime();});
+			//group by day
+			var startGroup = start.group(function(d) {return Math.floor(d/(1000*60*60));} )
+			
+			var comp = matchCF.dimension(function(d) {return d.composition;});
+			var compGroup = comp.group();
+			//possibly - wrap comp group in a non zero qty filter group
+			
+			//make the pie charts
+			sideChart
+				.height(150)
+				.width(150)
+				.radius(70)
+				.turnOnControls(true)
+				.label(function(d) { if (d.key == 100) return ""; return "";})
+				.dimension(side)
+				.colors(['#2222dd', '#dd2222'])
+				.colorDomain([100,200])
+				.group(sideGroup);
+				
+			winnersChart
+				.height(150)
+				.width(150)
+				.radius(70)
+				.turnOnControls(true)
+				.label(function(d) { if (d.key) return "Win"; return "Loss";})
+				.dimension(win)
+				.colors(['#aa33aa', '#33aa33'])
+				.group(winGroup);
+				
+				
+			//make the bar charts
+			durationChart
+				.width(400)
+				.height(200)
+				.turnOnControls(true)
+				.margins({top : 10, right:20, bottom:20, left : 20})
+				.dimension(duration)
+				.group(durationGroup)
+				.x(d3.scale.linear().domain([0, 60]))
+				.renderHorizontalGridLines(true);
+			durationChart.yAxis().tickFormat(function v() {return "";});
+	
+			matchStartChart 
+				.width(400)
+				.height(200)
+//				.turnOnControls(true)
+				.brushOn(false) //flaky and strange behavior I can't figure out.
+				//since it's a single day its less interesting to explore 
+				.margins({top : 10, right:20, bottom:20, left : 40})
+				.dimension(start)
+				.group(startGroup)
+				//start 16 hrs after the start of Aug 2
+				.x(d3.scale.linear().domain([18 + new Date(2015, 7, 2).getTime()/(1000*60*60), 1 + new Date(2015, 7, 3).getTime()/(1000*60*60)]))
+				.renderHorizontalGridLines(true);
+			//possibly also need to use matchStartChart.xAxis().tickValues([1,2, 3])
+			//esp. if we want to tack the date on the front
+			matchStartChart.xAxis().tickFormat(function(d) { return formatTime(new Date(d*1000*60*60));});
+			matchStartChart.yAxis().tickFormat(function v() {return "";});
+			
+			//make the composition chart
+			compositionChart
+				.width(400)
+				.height(1000)
+				.margins({top : 10, right:20, bottom:20, left : 150})
+				.dimension(comp)
+				.group(compGroup)
+				//limit results to top 40 values which results in a minimum of ~100 games played for a given matchup
+				.cap(40)
+				//turn off the bit that collects everything not in the cap
+				.othersGrouper(false)
+				.label(function(d) {
+					//can we stash the win rate in the object?
+					d.winRate = 0;
+					//label each with the win rate
+					win.filterAll();
+					var games = comp.filter(d.key).top(Infinity).length;
+					win.filter(true);
+					var wins = comp.filter(d.key).top(Infinity).length;
+					comp.filterAll();
+					win.filterAll();
+					if (games == 0) return "";
+					d.winRate = Math.round(100*wins/games);
+					return  d.winRate + '%';
+				})
+				//re-scale the x axis as the filter changes
+				.elasticX(true)
+				.ordering(function(d) {return -d.value;})
+				.colorAccessor(function(d) {return d.key;})
+				//look up colors per comp from the prepared color array
+				.colorCalculator(function(d) { return bilge.colormap[d.key];})
+				.on('renderlet', function(chart, filter) {
+					//annotate the composition chart with images according to the merc comp (the key)
+					var rows = $('#composition-chart').children('svg').children("g").children(".row");
+					for (var i = 0; i < rows.length; i++) {
+						var r = rows[i];
+						//depends on the key being present in the title, which is a bummer, since that 
+						//shows up in the tool tip.
+						var title = $(r).children("title").text();
+						var comp = +title.split(":")[0];
+						//back calculate the merc comp from the composite key
+						//there's probably a way to be more clever here with % but I'm tired.
+						var numOck = Math.floor(comp/216);
+						var numPlu = Math.floor((comp-216*numOck)/36);
+						var numIro = Math.floor((comp - 216*numOck - 36*numPlu)/6);
+						var numRaz = Math.floor((comp - 216*numOck - 36*numPlu - 6*numIro));
+						var xOffset = -25; //start to the left
+						var margin = -4;
+						var w = 20; //image scaling - as the cap drops this will have to go up.
+						var h = w;
+						//these could be local hosted but I figured, leave them as data dragon since it's an API challenge
+						for (var k = 0; k < numRaz; k++) {
+							bilge.insertImage(r, 'http://ddragon.leagueoflegends.com/cdn/5.15.1/img/item/3611.png', h, w, xOffset, 0);
+							xOffset -= w - margin;
+						}
+						for (var k = 0; k < numIro; k++) {
+							bilge.insertImage(r, 'http://ddragon.leagueoflegends.com/cdn/5.15.1/img/item/3612.png', h, w, xOffset, 0);
+							xOffset -= w - margin;
+						}
+						for (var k = 0; k < numPlu; k++) {
+							bilge.insertImage(r, 'http://ddragon.leagueoflegends.com/cdn/5.15.1/img/item/3613.png', h, w, xOffset, 0);
+							xOffset -= w - margin;
+						}
+						for (var k = 0; k < numOck; k++) {
+							bilge.insertImage(r, 'http://ddragon.leagueoflegends.com/cdn/5.15.1/img/item/3614.png', h, w, xOffset, 0);
+							xOffset -= w - margin;
+						}
+						
+					}
+				});
+				
+			dc.renderAll();
+				
+		});
+		</script>
+		</div>
+		<div id="footer" class="footer">This Bilgewater Data Analysis was created for the Riot API challenge 8/2015. Riot does not 
+		endorse this work and it does not reflect the views or opinions of Riot Games, or anyone involved in producing or managing League 
+		of Legends. League of Legends and Riot Games are trademarks or registered trademarks of Riot Games, Inc. League of Legends © Riot Games, Inc.
+		</div>
+
+	</div>
+	
+</body>
+
+</html>

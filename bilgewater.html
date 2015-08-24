@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Bilgewater</title>
+		<meta charset="utf-8">
+		<!--<link type="text/css" rel="stylesheet" href="bilgestyle.css">-->
+		<script src="d3.js"></script>
+		<script src="jquery-2.1.4.min.js"></script>
+		<script src="bilgewater.js"></script>
+		
+		<script>
+			bilge.init();
+
+			var svg = d3.select("#chart").append("svg")
+				.attr("width", 600)
+				.attr("height", 600)
+		</script>
+	</head>
+	<body>
+	
+	<div class="header">Bilgewater Data Mining</>
+	<div>Bilgewater introduced several new elements, including the ability to purchase mercenary minion upgrades. Each champion gets to purchase one type of mercenary of the four types available. If we assume that order doesn't matter <a class="footnote" href="#note1">[1]</a> then there are 70 possible combinations of mercenaries that a team could get <a class="footnote" href="#note2">[2]</a>. </div>
+	<div>Which of these combinations were successful and which were not? Were some 'counters' to other combinations? Was there any correlation at all, or were the minions not impactful to the game outcome? </div>
+	<div class="button" id="fetch">Fetch Data</div>
+	
+	<div id="chart"></div>
+
+	<div id="note1" class="footnote">I'm not sure if the order of purchase is reflected in which minion is replaced - therefore changing potentially the marching orders, and possibly making a small difference between groups that otherwise have the same composition</div>
+	<div id="note2" class="footnote">This is <a href="https://en.wikipedia.org/wiki/Combination">combination with repetition</a>, since players could all choose the same merc if they wanted. From <img src="cwr.png"/> 5 players (n) choosing from 4 items (k) is the same as 8 choose 4, or 8!/(4!4!), or 8*6*5 / 4*3*2, or 70. </div>
+
+	<div id="datadump"></div>
+	</body>
+
+</html>
